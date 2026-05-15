@@ -1,0 +1,231 @@
+---
+title: "Getting Started with CASCADE"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with CASCADE}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Introduction
+
+CASCADE classifies the cell type specificity of genes, peaks, and variants from multi-cell-type QTL analyses, and assigns each variant a regulatory mechanism (the chromatin-to-expression cascade). It distinguishes genuine cell type-specific effects from technical artifacts caused by power differences across cell types using a power-aware LFSR-based assessment, with a hierarchy-derived 6-category specificity system and an 8-category mechanism taxonomy.
+
+## Configuration
+
+Use `create_config()` to build a configuration object that tells CASCADE where your data lives and how to run the analysis. Path templates may include `{CELL_TYPE}` and `{CHR}` placeholders that the loader substitutes per cell type and per chromosome.
+
+```{r config-basic, eval = FALSE}
+library(cascade)
+
+config <- create_config(
+  cell_types = c("Mono", "DC", "NK", "B", "CD4_T", "CD8_T", "other_T"),
+  chromosomes = paste0("chr", 1:22),
+  file_patterns = list(
+    eqtl_acat        = "data/eqtl/{CELL_TYPE}.acat.tsv.gz",
+    caqtl_acat       = "data/caqtl/{CELL_TYPE}.acat.tsv.gz",
+    eqtl_susie       = "data/eqtl/{CELL_TYPE}.{CHR}.susie.tsv.gz",
+    caqtl_susie      = "data/caqtl/{CELL_TYPE}.{CHR}.susie.tsv.gz",
+    eqtl_lfsr        = "data/eqtl.lfsr.tsv.gz",
+    caqtl_lfsr       = "data/caqtl.lfsr.tsv.gz",
+    eqtl_meta        = "data/eqtl.meta.tsv.gz",
+    caqtl_meta       = "data/caqtl.meta.tsv.gz",
+    peak_bed         = "data/{CELL_TYPE}.peaks.bed",
+    peak_gene_links  = "data/{CELL_TYPE}.peak_gene_links.tsv.gz"
+  ),
+  parameters = list(
+    pip_threshold       = 0.5,
+    min_pip_threshold   = 0.1,
+    acat_fdr_threshold  = 0.05,
+    lfsr_sig_threshold  = 0.05,
+    lfsr_null_threshold = 0.5,
+    n_cores             = 4
+  )
+)
+```
+
+Alternatively, store the same structure as JSON and pass the file path directly to `run_cascade()`:
+
+```{r config-json, eval = FALSE}
+results <- run_cascade("config.json", output_dir = "results/")
+```
+
+### File patterns
+
+| Key | Description |
+|-----|-------------|
+| `eqtl_acat` / `caqtl_acat` | ACAT q-values per cell type |
+| `eqtl_susie` / `caqtl_susie` | SuSiE credible sets per cell type and chromosome |
+| `eqtl_lfsr` / `caqtl_lfsr` | Mash LFSR matrices (rows = feature×variant, columns = cell types) |
+| `eqtl_meta` / `caqtl_meta` | Meta-analysis results with Cochran's Q heterogeneity p-values |
+| `peak_bed` | BED of peak coordinates per cell type |
+| `peak_gene_links` | Per-cell-type peak-to-gene link table |
+| `eqtl_mashr` / `caqtl_mashr` | (Optional) mashr model RDS files |
+| `cs_clusters` / `cs_cluster_variants` | (Optional) credible-set cluster annotations |
+
+## Cell Type Hierarchy
+
+CASCADE uses a hierarchy to decide what counts as "shared" versus "specific". The package ships with `DEFAULT_CELL_HIERARCHY` for immune cells:
+
+```{r hierarchy-default, eval = FALSE}
+DEFAULT_CELL_HIERARCHY
+#> CellTypeHierarchy
+#>   Lineages (2): myeloid, lymphoid
+#>   L1 cell types (7): Mono, DC, NK, B, CD4_T, CD8_T, other_T
+#>   Subgroup levels: 1
+#>     Level 1: T-cell
+#>   Bulk: PBMC
+#>   Other: other
+#>   Mapping to L1: 25 entries
+#>   Categories (6): Cross-lineage shared | Likely shared but underpowered |
+#>     Lineage-specific | T-cell-specific | Single cell-type | No significance
+```
+
+The six categories are auto-generated from the hierarchy structure: 4 fixed categories plus one per grouping level (1 lineage + N subgroup levels).
+
+## Running the Analysis
+
+```{r run, eval = FALSE}
+results <- run_cascade(config, output_dir = "results/")
+```
+
+CASCADE always processes all three feature types (gene, peak, variant) and writes the following outputs:
+
+| File | Contents |
+|------|----------|
+| `gene_categorization.tsv.gz` | Per-gene specificity + heterogeneity columns |
+| `gene_categorization.summary.tsv` | Gene category counts |
+| `gene_categorization.top_variants.tsv.gz` | Top variants driving each gene |
+| `peak_categorization.tsv.gz` | Per-peak specificity + heterogeneity columns |
+| `peak_categorization.summary.tsv` | Peak category counts |
+| `peak_categorization.top_variants.tsv.gz` | Top variants driving each peak |
+| `variant_categorization.tsv.gz` | Per-variant Stage 2 cross-cell-type aggregate |
+| `variant_categorization.qtl_mechanism.summary.tsv` | Variant counts per QTL mechanism category |
+| `variant_categorization.cell_type_specificity.summary.tsv` | Variant counts per cell type specificity category |
+| `variant_categorization_per_celltype_{CELL_TYPE}.tsv.gz` | Per-variant Stage 1 output (one file per cell type) |
+
+Read results back in R:
+
+```{r read-results, eval = FALSE}
+genes <- data.table::fread("results/gene_categorization.tsv.gz")
+peaks <- data.table::fread("results/peak_categorization.tsv.gz")
+variants <- data.table::fread("results/variant_categorization.tsv.gz")
+```
+
+## Understanding Results
+
+### Gene and peak results
+
+The key column is `cell_type_specificity`, which takes one of the six hierarchy-derived values:
+
+| Category | Meaning |
+|----------|---------|
+| Cross-lineage shared | Significant in 2+ lineages (e.g., both myeloid and lymphoid) |
+| Likely shared but underpowered | LFSR gray-zone evidence suggests hidden sharing |
+| Lineage-specific | Significant in exactly one lineage |
+| T-cell-specific | Significant within the T-cell subgroup only |
+| Single cell-type | Significant in exactly one L1 cell type |
+| No significance | Not significant in any cell type |
+
+Companion columns include `significant_cts` / `n_significant_cts` (which L1 cell types reached the ACAT q-value threshold), `tested_cts` / `n_tested_cts`, and — when variant analysis runs — `top_variant`, `max_pip`, `max_chisq`, and `variant_heterogeneity`.
+
+### Variant results
+
+Variant categorization is two-level. The cross-cell-type table contains:
+
+- **`qtl_mechanism_category`**: One of 8 QTL mechanism categories — Local Cascade, Positional Cascade, Distal Cascade, caQTL + eQTL (No Link), Only caQTL (With Link), Only caQTL (No Link), Only eQTL, or No molQTL. The three cascade tiers are distinguished by where the chromatin accessibility bridge sits relative to the variant.
+- **`cell_type_specificity`** / **`gene_cell_type_specificity`** / **`peak_cell_type_specificity`**: three specificity assessments. The combined `cell_type_specificity` is mechanism-based (no LFSR demotion); the gene- and peak-specific columns apply LFSR.
+- **`qtl_pattern_number`** / **`qtl_pattern`**: fine-grained pattern (1–25) with a detailed mechanistic interpretation.
+
+### Variant heterogeneity
+
+When a feature is active in multiple cell types, CASCADE assesses effect heterogeneity using Cochran's Q test. The `VARIANT_HETEROGENEITY` codes are:
+
+| Code | Label | Meaning |
+|------|-------|---------|
+| a | shared_consistent | Same variant, consistent effect sizes |
+| b | shared_heterogeneous | Same variant, different magnitudes |
+| c | shared_opposite | Same variant, opposite effect directions |
+| d | distinct_variants | Different causal variants across cell types |
+
+## Column Mapping
+
+CASCADE expects specific column names in input files. If your data uses different names, override them via `column_mapping` in `create_config()`. Defaults are defined in `DEFAULT_COLUMN_MAPPING`.
+
+```{r column-mapping, eval = FALSE}
+config <- create_config(
+  cell_types = c("Mono", "DC", "NK", "B", "CD4_T", "CD8_T", "other_T"),
+  chromosomes = paste0("chr", 1:22),
+  file_patterns = list(...),
+  column_mapping = list(
+    eqtl_susie = list(
+      variant_id = "snp_id", # your column for variant IDs
+      feature_id = "gene", # your column for gene IDs
+      pip        = "posterior_prob" # your column for PIP values
+    ),
+    meta = list(
+      variant_id = "SNP",
+      feature_id = "gene_id",
+      cochran_q_nlog10p = "het_pval_nlog10"
+    )
+  )
+)
+```
+
+The `column_mapping` slot uses unprefixed keys for shared schemas (`peak_gene`, `lfsr`, `meta`); only `file_patterns` distinguishes eQTL vs caQTL with `eqtl_`/`caqtl_` prefixes. Only the file types and columns you need to override must be specified; all others keep their defaults.
+
+## Advanced: Custom Hierarchy
+
+To use CASCADE with a different tissue, define your own hierarchy with `create_cell_hierarchy()`. Here is an example for brain cell types:
+
+```{r hierarchy-brain, eval = FALSE}
+brain <- create_cell_hierarchy(
+  lineages = list(
+    neuronal = c("ExN_L23", "ExN_L4", "ExN_L56", "InN_PV", "InN_SST", "InN_VIP"),
+    glial    = c("Astro", "Oligo", "OPC", "Micro"),
+    vascular = c("Endo", "Pericyte")
+  ),
+  subgroups = list(
+    list(
+      excitatory = c("ExN_L23", "ExN_L4", "ExN_L56"),
+      inhibitory = c("InN_PV", "InN_SST", "InN_VIP")
+    )
+  ),
+  bulk = NULL,
+  other = NULL,
+  mapping_to_l1 = list(
+    ExN_L23_CUX2 = "ExN_L23",
+    ExN_L4_RORB  = "ExN_L4",
+    InN_PV_PVALB = "InN_PV"
+  ),
+  column_prefix = "cell_type"
+)
+
+brain
+#> CellTypeHierarchy
+#>   Lineages (3): neuronal, glial, vascular
+#>   L1 cell types (12): ExN_L23, ExN_L4, ExN_L56, InN_PV, InN_SST, InN_VIP,
+#>     Astro, Oligo, OPC, Micro, Endo, Pericyte
+#>   Subgroup levels: 1
+#>     Level 1: excitatory, inhibitory
+#>   Categories (6): Cross-lineage shared | Likely shared but underpowered |
+#>     Lineage-specific | Subgroup-specific | Single cell-type | No significance
+```
+
+Key points:
+
+- **lineages**: Must have 2+ groups. These define the top-level split.
+- **subgroups**: Optional list of grouping levels, ordered broadest to narrowest. Each group must be a subset of a single lineage. Levels with multiple subgroups produce a generic `Subgroup-specific` category; levels with a single subgroup use that subgroup's name (e.g., `T-cell-specific`).
+- **mapping_to_l1**: Maps finer-resolution cell types (L2, L3, ...) to their L1 parent. Targets must appear in `lineages` or `other`.
+- **column_prefix**: Controls how cell type column names are constructed in data files (e.g., `cell_type.l1.Astro`).
+
+Pass the custom hierarchy to `run_cascade()` by including it in your config:
+
+```{r hierarchy-use, eval = FALSE}
+config$hierarchy <- brain
+results <- run_cascade(config, output_dir = "brain_results/")
+```

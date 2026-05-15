@@ -1,0 +1,16 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^\.worktrees$
+^\.serena$
+^\.claude$
+^\.codex$
+^\..*\.Rcheck$
+^.*\.Rcheck$
+^clean\.sh$
+^docs$
+^tools$
+^README\.md$
+^LICENSE\.md$
+^cran-comments\.md$
+^_pkgdown\.yml$

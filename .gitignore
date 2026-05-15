@@ -1,0 +1,28 @@
+# Compiled code
+*.o
+*.so
+*.dll
+
+# R package build artifacts
+*.tar.gz
+*.Rcheck/
+
+# R session files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# RStudio files
+*.Rproj
+
+# Mac files
+.DS_Store
+
+# Other
+.serena
+.claude
+.codex
+
+# Local git worktrees
+.worktrees/

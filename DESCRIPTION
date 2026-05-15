@@ -1,0 +1,44 @@
+Package: cascade
+Type: Package
+Title: Comprehensive Analysis Suite for Cell-type specificity and Accessibility-Driven QTL Effects
+Version: 1.0.0
+Authors@R: person("Masahiro", "Kanai", email = "mkanai@broadinstitute.org", role = c("aut", "cre"))
+Description: Provides a hierarchical framework for systematically characterizing cell type
+    specificity and regulatory mechanisms of molecular QTLs (molQTLs) from multiome analyses.
+    Gene- and peak-level analyses classify eGenes and caPeaks by their cell type specificity
+    patterns, with power-aware assessment using local false sign rates (LFSR) from
+    multivariate adaptive shrinkage (mash) to identify likely shared but underpowered
+    features. Variant-level analysis classifies fine-mapped variants by regulatory mechanism,
+    with 25 mutually exclusive QTL patterns collapsing into eight mechanism categories that
+    include three chromatin-to-expression cascade tiers.
+License: MIT + file LICENSE
+URL: https://github.com/mkanai/cascade
+BugReports: https://github.com/mkanai/cascade/issues
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 3.5.0)
+Imports:
+    cli,
+    data.table (>= 1.12.0),
+    digest,
+    jsonlite,
+    memoise,
+    parallel,
+    qs2,
+    R.utils,
+    Rcpp,
+    S4Vectors,
+    stats,
+    utils
+Suggests:
+    argparse,
+    GenomicRanges,
+    IRanges,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+RoxygenNote: 7.3.2
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+LinkingTo:
+    Rcpp
