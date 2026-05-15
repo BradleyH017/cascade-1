@@ -14,6 +14,7 @@ Description: Provides a hierarchical framework for systematically characterizing
 License: MIT + file LICENSE
 URL: https://github.com/mkanai/cascade
 BugReports: https://github.com/mkanai/cascade/issues
+OS_type: unix
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 3.5.0)
