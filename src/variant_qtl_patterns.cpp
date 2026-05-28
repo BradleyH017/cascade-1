@@ -42,11 +42,11 @@ List detect_variant_qtl_patterns(
         "Local Cascade", "Positional Cascade", "Distal Cascade",
         "caQTL + eQTL (No Link)", "Only caQTL (With Link)",
         "Only caQTL (No Link)", "Only eQTL", "No molQTL"),
-    IntegerVector pattern_to_mechanism = IntegerVector::create(
+    IntegerVector pattern_to_mechanism = {
         1, 2, 2, 2, 3, 4, 4, 4, 4, 4,  // Patterns 1-10
         4, 4, 5, 5, 5, 5, 6, 6, 6, 7,  // Patterns 11-20
-        7, 7, 8, 8, 8                  // Patterns 21-25
-        ),
+        7, 7, 8, 8, 8                   // Patterns 21-25
+        },
     List caqtl_status_values =
         List::create(Named("OVERLAPPING") = "For overlapping peak",
                      Named("NON_OVERLAPPING") = "For non-overlapping peak",
